@@ -6,9 +6,8 @@ import { Icon, type IconName } from "./Icon";
 
 const links: { href: string; label: string; icon: IconName }[] = [
   { href: "/expert", label: "Capture", icon: "monitor" },
-  { href: "/work-map/demo", label: "Work Map", icon: "map" },
+  { href: "/work-map/latest", label: "Work Map", icon: "map" },
   { href: "/apprentice", label: "Apprentice", icon: "graduation" },
-  { href: "/demo-erp", label: "Demo ERP", icon: "building" },
 ];
 
 export function SiteNav() {
@@ -28,7 +27,9 @@ export function SiteNav() {
 
         <nav className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto sm:gap-1">
           {links.map((l) => {
-            const active = pathname === l.href || pathname.startsWith(`${l.href}/`);
+            // "/work-map/latest" redirects to a real id, so match the whole section.
+            const section = l.href.endsWith("/latest") ? l.href.replace(/\/latest$/, "") : l.href;
+            const active = pathname === l.href || pathname.startsWith(`${section}/`);
             return (
               <Link
                 key={l.href}

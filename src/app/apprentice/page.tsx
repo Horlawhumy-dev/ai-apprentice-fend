@@ -6,10 +6,11 @@ import {
   createApprenticeSession,
   evaluateAction,
   finishApprenticeSession,
+  getWorkflow,
 } from "@/services/api";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card, CardHeader, EmptyState, Stat } from "@/components/ui/Card";
+import { Card, CardHeader, EmptyState } from "@/components/ui/Card";
 import { Field, FieldRow, Select } from "@/components/ui/Field";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import PageShell, { PageHeader } from "@/components/ui/PageShell";
@@ -30,22 +31,47 @@ interface TutorResult {
   attempt_id?: string;
 }
 
-interface CaseData {
-  case_id: string;
+interface Guardrail {
+  rule_id?: string;
+  rule: string;
+  severity?: string;
+}
+
+interface WorkflowStep {
+  id: string;
+  action: string;
+  decision: string | null;
+  reason: string | null;
+  guardrails: Guardrail[];
+}
+
+interface WorkflowDetail {
+  id: string;
   title: string;
-  supplier: string;
-  amount: number;
-  proposed_cost_center: string;
-  required_asset_number: boolean;
-  note: string;
+  status: string;
+  steps: WorkflowStep[];
+}
+
+/** Fields the workflow's own guardrails require, e.g. ["owner"] for requires_fields. */
+function requiredFields(steps: WorkflowStep[]): string[] {
+  const fields = new Set<string>();
+  for (const step of steps) {
+    for (const rule of step.guardrails ?? []) {
+      const condition = (rule as Guardrail & { condition?: { requires_fields?: string[] } }).condition;
+      for (const field of condition?.requires_fields ?? []) fields.add(field);
+    }
+  }
+  return [...fields];
 }
 
 export default function ApprenticePage() {
   const [workflowId, setWorkflowId] = useState("");
-  const [caseData, setCaseData] = useState<CaseData | null>(null);
+  const [caseId, setCaseId] = useState("case_1");
+  const [caseJson, setCaseJson] = useState("{}");
+  const [workflow, setWorkflow] = useState<WorkflowDetail | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [costCenter, setCostCenter] = useState("CAPEX");
-  const [assetNumber, setAssetNumber] = useState("");
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [action, setAction] = useState("");
   const [result, setResult] = useState<TutorResult | null>(null);
   const [summary, setSummary] = useState<Record<string, number> | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,29 +90,48 @@ export default function ApprenticePage() {
     try {
       setError(null);
       setBusy(true);
-      const created = await createApprenticeSession(wfId, "case_alpha");
+      const wf = await getWorkflow(wfId);
+      if (wf.status !== "confirmed") {
+        setError(`This work map is "${wf.status}". Confirm it before training on it.`);
+        return;
+      }
+
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(caseJson || "{}");
+      } catch {
+        setError("Case data must be valid JSON.");
+        return;
+      }
+
+      setWorkflow(wf);
+      const required = requiredFields(wf.steps ?? []);
+      setFields(Object.fromEntries(required.map((f) => [f, ""])));
+      setAction(wf.steps?.[0]?.action ?? "");
+
+      const created = await createApprenticeSession(wfId, caseId.trim() || "case_1", parsed);
       setSessionId(created.id);
-      setCaseData(created.case);
-      setCostCenter(created.case.proposed_cost_center);
-      setAssetNumber("");
       setResult(null);
       setSummary(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to start case. Is the workflow confirmed?");
+      setError(e instanceof Error ? e.message : "Failed to start case. Is the work map confirmed?");
     } finally {
       setBusy(false);
     }
   };
 
-  const save = async () => {
-    if (!sessionId || !caseData) return;
+  const evaluate = async () => {
+    if (!sessionId) return;
     setBusy(true);
+    setError(null);
     try {
-      setResult(await evaluateAction(sessionId, "save_attempted", {
-        cost_center: costCenter,
-        amount: caseData.amount,
-        asset_number: assetNumber,
-      }));
+      const case_data: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(fields)) {
+        if (value !== "") case_data[key] = value;
+      }
+      setResult(await evaluateAction(sessionId, action, case_data));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to evaluate");
     } finally {
       setBusy(false);
     }
@@ -96,7 +141,8 @@ export default function ApprenticePage() {
     if (!sessionId) return;
     setBusy(true);
     try {
-      setSummary(await finishApprenticeSession(sessionId));
+      const res = await finishApprenticeSession(sessionId);
+      setSummary(res.summary ?? null);
     } finally {
       setBusy(false);
     }
@@ -136,6 +182,26 @@ export default function ApprenticePage() {
                 />
               </FieldRow>
 
+              <FieldRow label="Case ID" htmlFor="case-id">
+                <Field
+                  id="case-id"
+                  value={caseId}
+                  onChange={(e) => setCaseId(e.target.value)}
+                  placeholder="case_1"
+                  className="font-mono"
+                />
+              </FieldRow>
+
+              <FieldRow label="Case data (JSON)" htmlFor="case-json">
+                <Field
+                  id="case-json"
+                  value={caseJson}
+                  onChange={(e) => setCaseJson(e.target.value)}
+                  placeholder='{"ticket": "T-2", "severity": "high"}'
+                  className="font-mono"
+                />
+              </FieldRow>
+
               <Button
                 type="submit"
                 variant="primary"
@@ -161,7 +227,7 @@ export default function ApprenticePage() {
               <p className="text-xs text-muted">
                 No confirmed map handy?{" "}
                 <Link
-                  href="/work-map/demo"
+                  href="/work-map/latest"
                   className="font-medium text-brand-strong underline underline-offset-2"
                 >
                   Review a Work Map first
@@ -191,71 +257,85 @@ export default function ApprenticePage() {
         </div>
       )}
 
-      {caseData && (
+      {sessionId && workflow && (
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,1fr)]">
           <Card className="p-6 sm:p-7">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="min-w-0">
                 <Badge tone="brand" className="mb-2.5">
                   <Icon name="clipboard" size={12} />
-                  {caseData.case_id}
+                  {caseId}
                 </Badge>
-                <h2 className="text-xl font-semibold tracking-tight">{caseData.title}</h2>
+                <h2 className="text-xl font-semibold tracking-tight">{workflow.title}</h2>
               </div>
-              {sessionId && (
-                <Button variant="ghost" size="sm" icon="refresh" onClick={() => {
-                  setSessionId(null);
-                  setCaseData(null);
-                  setResult(null);
-                  setSummary(null);
-                }}>
-                  New case
-                </Button>
+              <Button variant="ghost" size="sm" icon="refresh" onClick={() => {
+                setSessionId(null);
+                setWorkflow(null);
+                setResult(null);
+                setSummary(null);
+              }}>
+                New case
+              </Button>
+            </div>
+
+            <div className="mt-5">
+              <p className="text-sm font-medium text-ink-soft">Guardrails you are held to</p>
+              {workflow.steps?.some((s) => s.guardrails?.length) ? (
+                <ul className="mt-2.5 space-y-1.5">
+                  {workflow.steps.flatMap((s) => s.guardrails ?? []).map((rule, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-ink-soft">
+                      <Icon name="shield" size={15} className="mt-0.5 shrink-0" />
+                      <span>
+                        {rule.rule}
+                        {rule.severity && (
+                          <span className="ml-1.5 text-xs uppercase tracking-wide text-ink-faint">
+                            {rule.severity}
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-2 text-sm text-ink-faint">
+                  This work map has no guardrails, so nothing will be blocked.
+                </p>
               )}
             </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <Stat label="Supplier" value={caseData.supplier} icon="building" />
-              <Stat label="Amount" value={`$${caseData.amount.toLocaleString()}`} icon="trending" tone="brand" />
-            </div>
-
-            {caseData.note && (
-              <p className="mt-4 flex items-start gap-2 rounded-xl bg-warn-soft px-3.5 py-2.5 text-sm text-warn">
-                <Icon name="alert" size={15} className="mt-0.5" />
-                {caseData.note}
-              </p>
-            )}
-
             <div className="mt-6 grid gap-5 border-t border-line pt-6 sm:grid-cols-2">
-              <FieldRow label="Cost center" htmlFor="cost-center">
-                <Select
-                  id="cost-center"
-                  value={costCenter}
-                  onChange={(e) => setCostCenter(e.target.value)}
-                >
-                  <option value="OPEX">OPEX</option>
-                  <option value="CAPEX">CAPEX</option>
+              <FieldRow label="Action" htmlFor="action">
+                <Select id="action" value={action} onChange={(e) => setAction(e.target.value)}>
+                  {(workflow.steps ?? []).map((s) => (
+                    <option key={s.id} value={s.action}>
+                      {s.action}
+                    </option>
+                  ))}
                 </Select>
               </FieldRow>
 
-              <FieldRow
-                label="Asset number"
-                htmlFor="asset-number"
-                hint={caseData.required_asset_number ? "Required for this case" : "Optional"}
-              >
-                <Field
-                  id="asset-number"
-                  value={assetNumber}
-                  onChange={(e) => setAssetNumber(e.target.value)}
-                  placeholder="A-1001"
-                  className="font-mono"
-                />
-              </FieldRow>
+              {Object.keys(fields).map((name) => (
+                <FieldRow key={name} label={name} htmlFor={`field-${name}`} hint="Required by a guardrail">
+                  <Field
+                    id={`field-${name}`}
+                    value={fields[name]}
+                    onChange={(e) => setFields((f) => ({ ...f, [name]: e.target.value }))}
+                    className="font-mono"
+                  />
+                </FieldRow>
+              ))}
             </div>
 
+            {Object.keys(fields).length === 0 && (
+              <p className="mt-4 text-sm text-ink-faint">
+                No field is required by this workflow&apos;s guardrails, so the action will be judged on
+                the rule text alone.
+              </p>
+            )}
+
             <div className="mt-6 flex flex-wrap gap-2.5 border-t border-line pt-5">
-              <Button variant="primary" icon="check" busy={busy} onClick={() => void save()}>
-                Save
+              <Button variant="primary" icon="check" busy={busy} onClick={() => void evaluate()}>
+                Submit action
               </Button>
               <Button variant="ghost" icon="stop" busy={busy} onClick={() => void finish()}>
                 Finish case

@@ -115,11 +115,15 @@ export async function listCases() {
   return res.json();
 }
 
-export async function createApprenticeSession(workflowId: string, caseId: string) {
+export async function createApprenticeSession(
+  workflowId: string,
+  caseId: string,
+  caseData: Record<string, unknown> = {},
+) {
   const res = await fetch(`${API_URL}/api/apprentice/sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ workflow_id: workflowId, case_id: caseId }),
+    body: JSON.stringify({ workflow_id: workflowId, case_id: caseId, case_data: caseData }),
   });
   if (!res.ok) return fail(res, "Failed to create apprentice session");
   return res.json();
@@ -156,3 +160,24 @@ export async function answerQuestion(sessionId: string, questionId: string, answ
   if (!res.ok) return fail(res, "Failed to submit answer");
   return res.json();
 }
+
+export interface VoiceConfig {
+  provider: "elevenlabs" | "prototype";
+  configured: boolean;
+  mode: "signed_url" | "manual_transcript";
+}
+
+/** Whether the backend can mint an ElevenLabs signed URL, or we fall back to manual entry. */
+export async function getVoiceConfig(): Promise<VoiceConfig> {
+  const res = await fetch(`${API_URL}/api/voice/config`, { cache: "no-store" });
+  if (!res.ok) return fail(res, "Failed to reach the voice service");
+  return res.json();
+}
+
+/** Short-lived signed URL. The ElevenLabs API key never leaves the backend. */
+export async function requestVoiceToken(): Promise<{ signed_url: string; expires_in: number }> {
+  const res = await fetch(`${API_URL}/api/voice/token`, { method: "POST" });
+  if (!res.ok) return fail(res, "Voice provider is not configured");
+  return res.json();
+}
+

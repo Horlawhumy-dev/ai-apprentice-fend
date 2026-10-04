@@ -17,6 +17,13 @@ const reviewLabel: Record<string, string> = {
   uncertain: "Uncertain",
 };
 
+function formatOffset(timestampMs: number, baseMs: number) {
+  const total = Math.max(0, Math.round((timestampMs - baseMs) / 1000));
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+  return `${mins}:${String(secs).padStart(2, "0")}`;
+}
+
 export default function WorkMapView({ workflowId }: { workflowId: string }) {
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const [selected, setSelected] = useState<Step | null>(null);
@@ -163,7 +170,7 @@ export default function WorkMapView({ workflowId }: { workflowId: string }) {
                     <span className="flex items-start justify-between gap-3">
                       <span className="text-sm font-medium">{step.action}</span>
                       <span className="shrink-0 text-[0.68rem] text-faint tabular-nums">
-                        {step.timestamp_ms}ms
+                        {formatOffset(step.timestamp_ms, workflow.steps[0]?.timestamp_ms ?? 0)}
                       </span>
                     </span>
 

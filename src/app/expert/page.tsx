@@ -210,11 +210,8 @@ export default function ExpertPage() {
 
             <p className="mt-4 flex flex-wrap items-center gap-1.5 text-sm text-muted">
               <Icon name="info" size={14} className="text-info" />
-              Capture the built-in{" "}
-              <Link className="font-medium text-brand-strong underline underline-offset-2" href="/demo-erp">
-                Demo ERP
-              </Link>
-              , or instrument your own system with the snippet below.
+              Instrument your own system with the snippet below, then work while the interviewer
+              listens.
             </p>
           </Card>
 

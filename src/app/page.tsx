@@ -33,7 +33,7 @@ const destinations: {
     points: ["Live event stream", "Pause and Off Record", "Voice-style rationale log"],
   },
   {
-    href: "/work-map/demo",
+    href: "/work-map/latest",
     icon: "map",
     title: "Work Map",
     copy: "A reviewable timeline of every step, its reasoning, and the guardrails behind it.",
@@ -74,7 +74,7 @@ export default function Home() {
             Start a capture
             <Icon name="arrowRight" size={16} className="transition-transform group-hover:translate-x-0.5" />
           </Link>
-          <Link href="/work-map/demo" className="btn btn-ghost btn-lg">
+          <Link href="/work-map/latest" className="btn btn-ghost btn-lg">
             <Icon name="map" size={16} />
             View a Work Map
           </Link>
