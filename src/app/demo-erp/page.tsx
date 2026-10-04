@@ -5,6 +5,13 @@ import { useEffect, useState } from "react";
 import { addEvent } from "@/services/api";
 import { getCaptureState, isCapturing, recordEvent } from "@/services/captureStore";
 import { useCaptureState } from "@/hooks/useCaptureState";
+import { Badge, StatusDot } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Card, CardHeader, Stat } from "@/components/ui/Card";
+import { Field, FieldRow, Select } from "@/components/ui/Field";
+import { Icon } from "@/components/ui/Icon";
+import PageShell, { PageHeader } from "@/components/ui/PageShell";
+import { sessionLabel, sessionLive, sessionTone } from "@/lib/ui";
 
 interface Invoice {
   id: string;
@@ -28,6 +35,7 @@ export default function DemoErpPage() {
   const [saved, setSaved] = useState(false);
   const [lastEvent, setLastEvent] = useState<string>("—");
   const capture = useCaptureState();
+  const live = sessionLive(capture.status);
 
   const emit = async (type: string, data: Record<string, unknown>) => {
     const st = getCaptureState();
@@ -80,7 +88,11 @@ export default function DemoErpPage() {
   const enterAssetNumber = (value: string) => {
     setInvoice((i) => ({ ...i, assetNumber: value }));
     if (value) {
-      void emit("asset_number_entered", { field: "asset_number", new_value: value, invoice_id: invoice.id });
+      void emit("asset_number_entered", {
+        field: "asset_number",
+        new_value: value,
+        invoice_id: invoice.id,
+      });
     }
   };
 
@@ -95,88 +107,136 @@ export default function DemoErpPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-100 p-6 text-slate-900">
-      <header className="mb-6 flex items-center justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-slate-500">Fictional Demo ERP</p>
-          <h1 className="text-2xl font-semibold">Invoice Processing</h1>
-        </div>
-        <div className="flex items-center gap-3">
-          <span
-            className={`rounded-full px-3 py-1 text-xs ${
-              isCapturing() ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"
-            }`}
-          >
-            {capture.status}
-          </span>
-          <Link href="/expert" className="text-sm underline">
-            Back to capture
-          </Link>
-        </div>
-      </header>
+    <PageShell>
+      <PageHeader
+        eyebrow="Fictional Demo ERP"
+        title="Invoice Processing"
+        description="A throwaway app that emits real capture events. Share this tab from the capture screen to watch the Work Map fill itself in."
+        badges={
+          <>
+            <Badge tone={sessionTone[capture.status] ?? "neutral"} pulse={live}>
+              <StatusDot tone={sessionTone[capture.status] ?? "neutral"} pulse={live} />
+              {sessionLabel[capture.status] ?? capture.status}
+            </Badge>
+            <Link
+              href="/expert"
+              className="inline-flex items-center gap-1.5 rounded-full bg-surface-inset px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:text-brand-strong"
+            >
+              <Icon name="arrowLeft" size={12} />
+              Back to capture
+            </Link>
+          </>
+        }
+      />
 
-      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <section className="rounded-xl border bg-white p-6">
-          <h2 className="text-lg font-semibold">Invoice {invoice.id}</h2>
-          <dl className="mt-4 grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <dt className="text-slate-500">Supplier</dt>
-              <dd className="mt-1 font-medium">{invoice.supplier}</dd>
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(300px,1fr)]">
+        {/* The "app window" being captured */}
+        <Card sheen className="overflow-hidden">
+          <div className="flex items-center gap-2 border-b border-line bg-surface-2/50 px-4 py-3">
+            <span className="size-2.5 rounded-full bg-bad/70" />
+            <span className="size-2.5 rounded-full bg-warn/70" />
+            <span className="size-2.5 rounded-full bg-ok/70" />
+            <span className="ml-2 truncate font-mono text-xs text-faint">erp.northwind.internal/invoices/{invoice.id}</span>
+          </div>
+
+          <div className="p-6 sm:p-7">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold tracking-tight">Invoice {invoice.id}</h2>
+              {invoice.amount >= 5000 && (
+                <Badge tone="warn">
+                  <Icon name="alert" size={12} />
+                  Above capitalization threshold
+                </Badge>
+              )}
             </div>
-            <div>
-              <dt className="text-slate-500">Amount</dt>
-              <dd className="mt-1 font-medium">${invoice.amount.toLocaleString()}</dd>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <Stat label="Supplier" value={invoice.supplier} icon="building" />
+              <Stat label="Amount" value={`$${invoice.amount.toLocaleString()}`} icon="trending" tone="brand" />
             </div>
-            <div>
-              <dt className="text-slate-500">Cost center</dt>
-              <dd className="mt-1">
-                <select
+
+            <div className="mt-6 grid gap-5 border-t border-line pt-6 sm:grid-cols-2">
+              <FieldRow label="Cost center" htmlFor="erp-cost-center">
+                <Select
+                  id="erp-cost-center"
                   value={invoice.costCenter}
                   onChange={(e) => changeCostCenter(e.target.value)}
-                  className="rounded border px-2 py-1"
                 >
                   <option value="OPEX">OPEX</option>
                   <option value="CAPEX">CAPEX</option>
-                </select>
-              </dd>
-            </div>
-            <div>
-              <dt className="text-slate-500">Asset number</dt>
-              <dd className="mt-1">
-                <input
+                </Select>
+              </FieldRow>
+
+              <FieldRow label="Asset number" htmlFor="erp-asset-number">
+                <Field
+                  id="erp-asset-number"
                   value={invoice.assetNumber}
                   onChange={(e) => enterAssetNumber(e.target.value)}
                   placeholder="A-1001"
-                  className="rounded border px-2 py-1"
+                  className="font-mono"
                 />
-              </dd>
+              </FieldRow>
             </div>
-          </dl>
-          <div className="mt-6 flex gap-3">
-            <button onClick={viewHistory} className="rounded-lg border px-4 py-2 text-sm">
-              View supplier history
-            </button>
-            <button onClick={save} className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white">
-              Save invoice
-            </button>
-          </div>
-          {saved && <p className="mt-4 text-sm text-emerald-700">Saved to local demo state.</p>}
-        </section>
 
-        <aside className="rounded-xl border bg-white p-6">
-          <h2 className="text-lg font-semibold">Activity</h2>
-          <p className="mt-2 text-sm text-slate-500">Last event: {lastEvent}</p>
-          <p className="mt-2 text-xs text-slate-500">
-            Events are emitted only while capture is active. This page is safe to share as your screen.
-          </p>
-          {history && (
-            <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm">
-              <p className="font-medium">Supplier history</p>
-              <p className="mt-1 text-slate-600">Previous invoices: 3 • Last invoice: $2,100 (OPEX)</p>
+            <div className="mt-6 flex flex-wrap gap-2.5 border-t border-line pt-5">
+              <Button variant="ghost" icon="search" onClick={viewHistory}>
+                View supplier history
+              </Button>
+              <Button variant="primary" icon="check" onClick={save}>
+                Save invoice
+              </Button>
             </div>
-          )}
-        </aside>
+
+            {saved && (
+              <p className="animate-rise mt-4 inline-flex items-center gap-2 rounded-lg bg-ok-soft px-3 py-2 text-sm text-ok">
+                <Icon name="checkCircle" size={15} />
+                Saved to local demo state.
+              </p>
+            )}
+          </div>
+        </Card>
+
+        {/* Capture telemetry */}
+        <Card className="h-fit p-6">
+          <CardHeader
+            icon="activity"
+            title="Activity"
+            subtitle="Events fire only while capture is active."
+          />
+
+          <div className="mt-5 space-y-3">
+            <div className="glass-inset rounded-xl px-3.5 py-3">
+              <p className="eyebrow">Last event</p>
+              <p className="mt-1.5 font-mono text-xs break-all">{lastEvent}</p>
+            </div>
+
+            <div
+              className={`rounded-xl px-3.5 py-3 transition-colors ${
+                live ? "bg-ok-soft" : "glass-inset"
+              }`}
+            >
+              <p className="flex items-center gap-1.5 text-xs font-medium">
+                <StatusDot tone={live ? "ok" : "neutral"} pulse={live} />
+                {live ? "Streaming events" : "Events paused"}
+              </p>
+              <p className="mt-1 text-[0.68rem] leading-relaxed text-muted">
+                This page is safe to share as your screen — nothing is stored server-side.
+              </p>
+            </div>
+
+            {history && (
+              <div className="animate-rise glass-inset rounded-xl p-3.5">
+                <p className="eyebrow flex items-center gap-1.5">
+                  <Icon name="building" size={11} />
+                  Supplier history
+                </p>
+                <p className="mt-2 text-sm">Previous invoices: 3</p>
+                <p className="mt-0.5 text-sm text-muted">Last invoice: $2,100 (OPEX)</p>
+              </div>
+            )}
+          </div>
+        </Card>
       </div>
-    </main>
+    </PageShell>
   );
 }

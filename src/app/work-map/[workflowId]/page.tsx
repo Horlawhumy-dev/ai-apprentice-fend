@@ -1,17 +1,28 @@
+import type { Metadata } from "next";
 import WorkMapView from "@/components/work-map/WorkMapView";
+import PageShell, { PageHeader } from "@/components/ui/PageShell";
 
-export default async function WorkMapPage({
-  params,
-}: {
-  params: Promise<{ workflowId: string }>;
-}) {
+export const metadata: Metadata = {
+  title: "Work Map",
+  description: "Review workflow steps, confirm rules, and inspect the evidence behind each decision.",
+};
+
+export default async function WorkMapPage({ params }: PageProps<"/work-map/[workflowId]">) {
   const { workflowId } = await params;
 
   return (
-    <main className="min-h-screen bg-slate-50 p-8">
-      <h1 className="text-3xl font-semibold">Work Map</h1>
-      <p className="mt-2 text-slate-600">Review workflow steps, confirm rules, and inspect evidence.</p>
+    <PageShell wide>
+      <PageHeader
+        eyebrow="AI Apprentice / Review"
+        title="Work Map"
+        description="Review workflow steps, confirm the rules behind them, and inspect the evidence each decision was derived from."
+        badges={
+          <code className="glass-inset rounded-lg px-2 py-1 font-mono text-[0.7rem] text-muted">
+            {workflowId}
+          </code>
+        }
+      />
       <WorkMapView workflowId={workflowId} />
-    </main>
+    </PageShell>
   );
 }
